@@ -24,61 +24,9 @@ def get_access_token():
         data = response.json()
         return data['access_token']
     except Exception as e:
-        print(f"获取access_token失败，错误信息: {e}")
+        print(f"获取 access_token 失败，错误信息: {e}")
         if 'response' in locals():
             print(f"微信接口返回的原始内容: {response.text[:300]}")
-        sys.exit(1)
-
-def get_weather(region):
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.0.0 Safari/537.36'
-    }
-    key = config.get("weather_key")
-    region_url = f"https://geoapi.qweather.com/v2/city/lookup?location={region}&key={key}"
-    
-    try:
-        print(f"正在向和风天气查询地区: {region}")
-        res_region = requests.get(region_url, headers=headers)
-        
-        # 重点：拦截 HTTP 204 和其他非 200 错误
-        if res_region.status_code == 204:
-            print(f"❌ 错误：和风天气返回了 204 No Content。")
-            print(f"👉 原因：你填写的 region ('{region}') 和风天气无法识别，或免费版不支持。")
-            print(f"💡 建议：请尝试将 config.txt 中的 region 改为更常见的城市名，例如 '北京' 或 '广州'，或者使用和风天气的 Location ID。")
-            sys.exit(1)
-        elif res_region.status_code != 200:
-            print(f"❌ 错误：请求被拒绝，HTTP 状态码: {res_region.status_code}")
-            sys.exit(1)
-            
-        region_data = res_region.json()
-        
-        if str(region_data.get("code")) == "404":
-            print("推送消息失败，请检查地区名是否有误！")
-            sys.exit(1)
-        elif str(region_data.get("code")) == "401":
-            print("推送消息失败，请检查和风天气key是否正确！")
-            sys.exit(1)
-            
-        location_id = region_data["location"][0]["id"]
-        
-        weather_url = f"https://devapi.qweather.com/v7/weather/now?location={location_id}&key={key}"
-        res_weather = requests.get(weather_url, headers=headers)
-        
-        if res_weather.status_code == 204:
-             print("❌ 错误：获取天气具体信息时返回 204，该地区无天气数据。")
-             sys.exit(1)
-             
-        weather_data = res_weather.json()
-        
-        weather = weather_data["now"]["text"]
-        temp = weather_data["now"]["temp"] + u"\N{DEGREE SIGN}" + "C"
-        wind_dir = weather_data["now"]["windDir"]
-        return weather, temp, wind_dir
-        
-    except Exception as e:
-        print(f"获取天气信息失败: {e}")
-        if 'res_region' in locals():
-            print(f"地区接口状态码: {res_region.status_code}, 返回内容: {res_region.text[:300]}")
         sys.exit(1)
 
 
@@ -91,7 +39,7 @@ def get_birthday(birthday, year, today):
         try:
             birthday_date = ZhDate(year, r_mouth, r_day).to_datetime().date()
         except TypeError:
-            print("请检查生日的日子是否在今年存在")
+            print("请检查农历生日的日期是否正确")
             sys.exit(1)
         birthday_month = birthday_date.month
         birthday_day = birthday_date.day
@@ -107,7 +55,6 @@ def get_birthday(birthday, year, today):
             birth_date = date((year + 1), r_last_birthday.month, r_last_birthday.day)
         else:
             birth_date = date((year + 1), birthday_month, birthday_day)
-        # 优化：直接使用 .days 属性获取天数差
         birth_day = (birth_date - today).days
     elif today == year_date:
         birth_day = 0
@@ -119,7 +66,6 @@ def get_birthday(birthday, year, today):
 
 
 def get_ciba():
-    # 优化：改用 https 协议，防止被网络环境拦截
     url = "https://open.iciba.com/dsapi/"
     headers = {
         'Content-Type': 'application/json',
@@ -136,7 +82,7 @@ def get_ciba():
         return "今日由于网络原因，无法获取金句", "Failed to get quote today due to network issues."
 
 
-def send_message(to_user, access_token, region_name, weather, temp, wind_dir, note_ch, note_en):
+def send_message(to_user, access_token, note_ch, note_en):
     url = f"https://api.weixin.qq.com/cgi-bin/message/template/send?access_token={access_token}"
     week_list = ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"]
     year = localtime().tm_year
@@ -150,7 +96,6 @@ def send_message(to_user, access_token, region_name, weather, temp, wind_dir, no
     love_day = int(config["love_date"].split("-")[2])
     love_date = date(love_year, love_month, love_day)
     
-    # 优化：直接使用 .days 获取相爱天数
     love_days = str((today - love_date).days)
     
     birthdays = {}
@@ -158,6 +103,7 @@ def send_message(to_user, access_token, region_name, weather, temp, wind_dir, no
         if k[0:5] == "birth":
             birthdays[k] = v
             
+    # 构建推送数据，已移除所有天气相关的字段
     data = {
         "touser": to_user,
         "template_id": config["template_id"],
@@ -165,16 +111,13 @@ def send_message(to_user, access_token, region_name, weather, temp, wind_dir, no
         "topcolor": "#FF0000",
         "data": {
             "date": {"value": f"{today} {week}", "color": get_color()},
-            "region": {"value": region_name, "color": get_color()},
-            "weather": {"value": weather, "color": get_color()},
-            "temp": {"value": temp, "color": get_color()},
-            "wind_dir": {"value": wind_dir, "color": get_color()},
             "love_day": {"value": love_days, "color": get_color()},
             "note_en": {"value": note_en, "color": get_color()},
             "note_ch": {"value": note_ch, "color": get_color()}
         }
     }
     
+    # 动态添加生日字段
     for key, value in birthdays.items():
         birth_day = get_birthday(value["birthday"], year, today)
         if birth_day == 0:
@@ -200,7 +143,7 @@ def send_message(to_user, access_token, region_name, weather, temp, wind_dir, no
         elif errcode == 40003:
             print(f"[{to_user}] 推送消息失败，请检查微信号是否正确")
         elif errcode == 0:
-            print(f"[{to_user}] 推送消息成功")
+            print(f"[{to_user}] 推送消息成功 🎉")
         else:
             print(f"[{to_user}] 推送消息发生未知错误: {res_data}")
             
@@ -213,7 +156,6 @@ def send_message(to_user, access_token, region_name, weather, temp, wind_dir, no
 if __name__ == "__main__":
     try:
         with open("config.txt", encoding="utf-8") as f:
-            # 优化：使用 ast.literal_eval 代替 eval，更安全且不要求强行修改原有的配置格式
             config = ast.literal_eval(f.read())
     except FileNotFoundError:
         print("推送消息失败，请检查 config.txt 文件是否与程序位于同一路径")
@@ -222,16 +164,17 @@ if __name__ == "__main__":
         print(f"推送消息失败，请检查配置文件格式是否正确: {e}")
         sys.exit(1)
 
+    # 1. 获取微信 accessToken
     accessToken = get_access_token()
     users = config.get("user", [])
-    region = config.get("region")
     
-    weather, temp, wind_dir = get_weather(region)
+    # 2. 获取每日金句
     note_ch = config.get("note_ch", "")
     note_en = config.get("note_en", "")
     
     if note_ch == "" and note_en == "":
         note_ch, note_en = get_ciba()
         
+    # 3. 开始向每个用户推送消息（去除了天气参数）
     for user in users:
-        send_message(user, accessToken, region, weather, temp, wind_dir, note_ch, note_en)
+        send_message(user, accessToken, note_ch, note_en)
