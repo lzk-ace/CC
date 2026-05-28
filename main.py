@@ -205,4 +205,19 @@ if __name__ == "__main__":
         print("推送消息失败，请检查 config.txt 文件是否与程序位于同一路径")
         sys.exit(1)
     except Exception as e:
-        print(
+        print(f"推送消息失败，请检查配置文件格式是否正确: {e}")
+        sys.exit(1)
+
+    accessToken = get_access_token()
+    users = config.get("user", [])
+    region = config.get("region")
+    
+    weather, temp, wind_dir = get_weather(region)
+    note_ch = config.get("note_ch", "")
+    note_en = config.get("note_en", "")
+    
+    if note_ch == "" and note_en == "":
+        note_ch, note_en = get_ciba()
+        
+    for user in users:
+        send_message(user, accessToken, region, weather, temp, wind_dir, note_ch, note_en)
