@@ -29,7 +29,6 @@ def get_access_token():
             print(f"微信接口返回的原始内容: {response.text[:300]}")
         sys.exit(1)
 
-
 def get_weather(region):
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.0.0 Safari/537.36'
@@ -38,7 +37,19 @@ def get_weather(region):
     region_url = f"https://geoapi.qweather.com/v2/city/lookup?location={region}&key={key}"
     
     try:
+        print(f"正在向和风天气查询地区: {region}")
         res_region = requests.get(region_url, headers=headers)
+        
+        # 重点：拦截 HTTP 204 和其他非 200 错误
+        if res_region.status_code == 204:
+            print(f"❌ 错误：和风天气返回了 204 No Content。")
+            print(f"👉 原因：你填写的 region ('{region}') 和风天气无法识别，或免费版不支持。")
+            print(f"💡 建议：请尝试将 config.txt 中的 region 改为更常见的城市名，例如 '北京' 或 '广州'，或者使用和风天气的 Location ID。")
+            sys.exit(1)
+        elif res_region.status_code != 200:
+            print(f"❌ 错误：请求被拒绝，HTTP 状态码: {res_region.status_code}")
+            sys.exit(1)
+            
         region_data = res_region.json()
         
         if str(region_data.get("code")) == "404":
@@ -52,6 +63,11 @@ def get_weather(region):
         
         weather_url = f"https://devapi.qweather.com/v7/weather/now?location={location_id}&key={key}"
         res_weather = requests.get(weather_url, headers=headers)
+        
+        if res_weather.status_code == 204:
+             print("❌ 错误：获取天气具体信息时返回 204，该地区无天气数据。")
+             sys.exit(1)
+             
         weather_data = res_weather.json()
         
         weather = weather_data["now"]["text"]
@@ -62,9 +78,7 @@ def get_weather(region):
     except Exception as e:
         print(f"获取天气信息失败: {e}")
         if 'res_region' in locals():
-            print(f"地区接口返回内容: {res_region.text[:300]}")
-        if 'res_weather' in locals():
-            print(f"天气接口返回内容: {res_weather.text[:300]}")
+            print(f"地区接口状态码: {res_region.status_code}, 返回内容: {res_region.text[:300]}")
         sys.exit(1)
 
 
